@@ -1,7 +1,5 @@
-/* =====================================================================
-   Bloxd Music Maker — co-routine player (async / await only)
-   Sequencing is done with awaits; no setInterval / callback scheduling.
-   ===================================================================== */
+/* Bloxd Music Maker — sequencer for the in-browser preview */
+
 const Player = (() => {
   const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -11,60 +9,52 @@ const Player = (() => {
   let onNote = () => {};
   let onEnd = () => {};
 
-  // Flatten patterns + steps into absolute-time events (seconds from song start).
   const buildEvents = (song) => {
     const { bpm = 110, swing = 0, patterns = [] } = song;
-    if (!patterns.length) return [];
+    if (!patterns.length) return { events: [], total: 0 };
     const stepsPerPattern = patterns[0].steps || 16;
-    const quarterSec = 60 / bpm; // one quarter note
-    const stepSec = quarterSec / 4; // one step = sixteenth note
+    const quarterSec = 60 / bpm;
+    const stepSec = quarterSec / 4;
     const patternSec = stepsPerPattern * stepSec;
-    const swingSec = (swing / 100) * stepSec; // max ~40% of a step
+    const swingSec = (swing / 100) * stepSec;
 
     const events = [];
     patterns.forEach((pat, pi) => {
       const offset = pi * patternSec;
       (pat.notes || []).forEach((n) => {
-        const stepSecAbs = n.step * stepSec;
         const sway = (n.step % 2 === 1) ? swingSec : 0;
-        const time = offset + stepSecAbs + sway;
         events.push({
-          time,
+          time: offset + n.step * stepSec + sway,
           pitch: n.pitch,
-          instrument: n.instrument || 'blox',
+          instrument: n.instrument || 'harp_pling',
           velocity: n.velocity == null ? 1 : n.velocity,
-          dur: stepSec * 0.82, // note length slightly shorter than step (cozy groove)
+          dur: stepSec * 0.82
         });
       });
     });
     events.sort((a, b) => a.time - b.time || a.pitch - b.pitch);
-    const total = patterns.length * patternSec;
-    return { events, total };
+    return { events, total: patterns.length * patternSec };
   };
 
-  const playSong = async (song) => {
+  const playOnce = async (song) => {
     const { events, total } = buildEvents(song);
-    if (!events.length) {
-      onEnd(); return;
-    }
-    running = true;
-    stopRequested = false;
+    if (!events.length) return;
     let last = 0;
-    try {
-      for (const ev of events) {
-        if (stopRequested) break;
-        await sleep(Math.max(0, (ev.time - last) * 1000));
-        if (stopRequested) break;
-        last = ev.time;
+    for (const ev of events) {
+      if (stopRequested) break;
+      const wait = Math.max(0, (ev.time - last) * 1000);
+      if (wait) await sleep(wait);
+      if (stopRequested) break;
+      last = ev.time;
+      try {
         AudioKit.play(ev.pitch, ev.dur, ev.instrument, ev.velocity);
-        onNote(ev);
+      } catch (err) {
+        console.error('note play failed', err);
       }
-      if (!stopRequested) {
-        await sleep(Math.max(0, (total - last) * 1000));
-        if (!stopRequested) onEnd();
-      }
-    } finally {
-      running = false;
+      try { onNote(ev); } catch (e) {}
+    }
+    if (!stopRequested) {
+      await sleep(Math.max(0, (total - last) * 1000));
     }
   };
 
@@ -72,13 +62,20 @@ const Player = (() => {
     setLoop(v) { loop = !!v; },
     setOnNote(cb) { onNote = cb || (() => {}); },
     setOnEnd(cb) { onEnd = cb || (() => {}); },
-    isPlaying() { return running; },
-    async play(song) {
+    isPlaying() { return running && !stopRequested; },
+    play(song) {
       if (running) this.stop();
-      // loop via recursion so the whole thing stays a co-routine
+      running = true;
+      stopRequested = false;
       const run = async () => {
-        await playSong(song);
-        if (loop && !stopRequested) run();
+        try {
+          do {
+            await playOnce(song);
+          } while (loop && !stopRequested);
+        } finally {
+          running = false;
+          try { onEnd(); } catch (e) {}
+        }
       };
       run();
     },
