@@ -1,6 +1,6 @@
 # Bloxd Music Studio
 
-A cozy in-browser music editor for [bloxd.io](https://bloxd.io). Compose on a piano roll, preview with chiptune voices, and export self-contained JavaScript that plays with `async`/`await` co-routines.
+A cozy in-browser music editor for [bloxd.io](https://bloxd.io). Compose on a piano roll, preview in the browser, and export **World Code** you can paste into a Bloxd lobby.
 
 **Live:** after GitHub Pages is on, the site is at  
 https://epicoo00000.github.io/Bloxd-music-studio/
@@ -11,19 +11,39 @@ https://epicoo00000.github.io/Bloxd-music-studio/
 - Four voices: **Blox**, **Bell**, **Reed**, **Hollow**
 - Tempo (BPM), swing, master volume, loop
 - Multiple patterns
-- **Export Code** — compressed co-routine JS you can copy or download
-- **`/run`** — paste exported code in the command bar to play it
-- Space bar to play / pause
+- **Export Code** — Bloxd World Code (`tick` + `api.playSound`, no `async`)
+- In Bloxd chat: **`/run`** to play, **`/stop`** to stop
+- Space bar to preview in the browser
+
+## Play it in Bloxd
+
+Bloxd’s code engine **does not support `async` functions**, `await`, `setTimeout`, or `window.AudioContext`. Export is written for that sandbox.
+
+1. Compose in this studio and click **Export Code**
+2. Copy the snippet
+3. In your Bloxd world, press **F8** (World Code) and paste
+4. In chat type **`/run`** to play, **`/stop`** to stop
+
+Sound map (Bloxd `playSound` names):
+
+| Studio | Bloxd sound   | Pitch |
+|--------|---------------|--------|
+| Blox   | `harp_pling`  | rate = 2^((midi−60)/12), clamped 0.5–4 |
+| Bell   | `sonarBeep`   | same |
+| Reed   | `trumpetNote1`| same |
+| Hollow | `bass`        | same |
+
+World Code is limited to 16,000 characters. The export modal shows the length.
 
 ## Project structure
 
 ```
 index.html          # app shell
 css/style.css       # UI
-js/audio.js         # Web Audio synth
-js/player.js        # async/await sequencer
+js/audio.js         # Web Audio synth (browser preview)
+js/player.js        # browser sequencer
 js/editor.js        # piano-roll canvas
-js/app.js           # state, transport, export
+js/app.js           # state, transport, Bloxd export
 favicon.svg
 ```
 
@@ -37,23 +57,6 @@ Open `index.html` in a browser, or from this folder:
 npx --yes serve .
 ```
 
-Then compose, hit **Play**, and **Export Code** for a `.js` snippet.
-
-### `/run` exported music
-
-Export copies a command like:
-
-```
-/run (async function(){ ... })();
-```
-
-Paste that into the command bar at the bottom (or press `/` then `run` and paste the snippet) and hit Enter. The studio evals the co-routine and plays it.
-
-- `/run` — play the current song as exported code
-- `/run (async function(){ ... })();` — play a pasted export
-- `/stop` — stop playback
-
-
 ## Deploy (GitHub Pages)
 
 This repo is already laid out for Pages (site at the repo root).
@@ -65,13 +68,3 @@ This repo is already laid out for Pages (site at the repo root).
    `https://<user>.github.io/Bloxd-music-studio/`
 
 Any other static host (Netlify, Vercel, Cloudflare Pages) also works: point it at this folder, no build command.
-
-## Export
-
-**Export Code** generates a minified IIFE that:
-
-- uses `async` / `await` only (no `setInterval`)
-- creates an `AudioContext` and plays the notes in order
-- can loop
-
-Copy it into a page or Bloxd world-code block that can run JavaScript with Web Audio.
