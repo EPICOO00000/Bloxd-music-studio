@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bloxd Music Studio</title>
-  <meta name="description" content="In-browser Bloxd.io music editor. Compose on a piano roll, play it back, and export async co-routine JavaScript.">
+  <meta name="description" content="Compose Bloxd.io music and export World Code that plays with api.playSound.">
   <meta name="theme-color" content="#f59e0b">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/style.css">
@@ -63,7 +63,7 @@
             <div class="grid-overlay" id="grid-overlay"></div>
           </div>
         </div>
-        <div class="hint" id="hint">Click a cell to add a note &bull; drag to paint &bull; right-click to erase &bull; <kbd>Space</kbd> to play &bull; Export → paste into Bloxd World Code (F8) → chat <kbd>/run</kbd></div>
+        <div class="hint" id="hint">Click to add a note &bull; right-click erases &bull; <kbd>Space</kbd> previews here &bull; Export pastes into Bloxd <kbd>F8</kbd> World Code and plays for the player</div>
       </main>
     </div>
 
@@ -71,9 +71,9 @@
       <form class="cmd-form" id="cmd-form" autocomplete="off" spellcheck="false">
         <span class="cmd-prefix" aria-hidden="true">/</span>
         <input id="cmd" class="cmd-input" type="text" name="cmd"
-          placeholder="run   (preview here — in Bloxd paste World Code, then /run)"
-          title="Type /run to preview. In Bloxd, paste Export into World Code (F8), then /run in chat."
-          aria-label="Command. Type run to preview the song.">
+          placeholder="run  (preview in this browser)"
+          title="Type run to preview here. Bloxd uses the Export World Code."
+          aria-label="Command">
         <button type="submit" class="btn accent small" id="btn-cmd">Run</button>
       </form>
       <div class="bottom-row">
@@ -85,8 +85,8 @@
           <span class="meta" id="meta">Ready</span>
         </div>
         <div class="export-wrap">
-          <button class="btn accent" id="btn-export" title="Export Bloxd World Code">Export Code</button>
-          <span class="tag" id="export-tag">Bloxd World Code</span>
+          <button class="btn accent" id="btn-export" title="Export Bloxd World Code">Export for Bloxd</button>
+          <span class="tag" id="export-tag">api.playSound</span>
         </div>
       </div>
     </footer>
@@ -94,22 +94,28 @@
     <dialog class="modal" id="export-modal">
       <div class="modal-card">
         <header class="modal-head">
-          <h3>Bloxd World Code</h3>
+          <h3>Paste into Bloxd</h3>
           <button class="btn ghost small" id="btn-close-modal" title="Close">Close</button>
         </header>
         <div class="modal-body">
-          <p class="small muted">Bloxd cannot run <kbd>async</kbd>. This uses <kbd>tick</kbd> + <kbd>api.playSound</kbd> only.</p>
           <ol class="export-steps">
-            <li>Copy this into <strong>World Code</strong> (press <kbd>F8</kbd> in your world)</li>
-            <li>In chat type <kbd>/run</kbd> to play, <kbd>/stop</kbd> to stop</li>
+            <li>In your world press <kbd>F8</kbd> (World Code)</li>
+            <li>Add a <strong>.js</strong> file (not .ts) and paste the code below, then save</li>
+            <li>Join / respawn — the song plays for that player. Chat <kbd>/run</kbd> replays, <kbd>/stop</kbd> stops</li>
+            <li>Optional: put <code>playTune(myId)</code> in a Code Block so a click plays it for you</li>
           </ol>
-          <p class="small muted" id="export-note">Sounds: Blox → harp_pling · Bell → sonarBeep · Reed → trumpetNote1 · Hollow → bass</p>
+          <p class="small muted" id="export-note">Uses api.playSound only. No async, no AudioContext.</p>
           <div class="code-wrap">
             <pre><code id="export-code">/* compose a song first */</code></pre>
           </div>
+          <p class="small muted" style="margin-top:12px">Code Block (click to play) — only after World Code is saved:</p>
+          <div class="code-wrap">
+            <pre><code id="export-block">playTune(myId)</code></pre>
+          </div>
         </div>
         <footer class="modal-foot">
-          <button class="btn ghost small" id="btn-copy">Copy</button>
+          <button class="btn ghost small" id="btn-copy">Copy World Code</button>
+          <button class="btn ghost small" id="btn-copy-block">Copy Code Block</button>
           <button class="btn ghost small" id="btn-run-export">Preview here</button>
           <button class="btn accent small" id="btn-download">Download .js</button>
         </footer>
@@ -117,6 +123,7 @@
     </dialog>
   </div>
 
+  <script src="js/sounds.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/player.js"></script>
   <script src="js/editor.js"></script>
