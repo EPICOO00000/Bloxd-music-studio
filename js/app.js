@@ -10,19 +10,14 @@
     swing: 0,
     volume: 70,
     loop: true,
-    currentInstrument: 'blox',
+    currentInstrument: 'harp_pling',
     patterns: [
       { id: 'p1', name: 'Pattern 1', steps: 16, notes: [] }
     ],
     currentPattern: 'p1',
   };
 
-  const INSTRUMENTS = [
-    { id: 'blox', label: 'Blox', color: '#f59e0b' },
-    { id: 'bell', label: 'Bell', color: '#c084fc' },
-    { id: 'reed', label: 'Reed', color: '#34d399' },
-    { id: 'hollow', label: 'Hollow', color: '#60a5fa' }
-  ];
+  const INSTRUMENTS = BLOXD_SOUNDS;
 
   /* ---------- modules ---------- */
   AudioKit.init(state.volume);
@@ -63,10 +58,12 @@
     INSTRUMENTS.forEach((inst) => {
       const chip = document.createElement('div');
       chip.className = 'chip' + (state.currentInstrument === inst.id ? ' active' : '');
-      chip.innerHTML = `<span style="opacity:.75">${inst.label}</span><span class="dot"></span>`;
+      chip.innerHTML = `<span><span style="opacity:.9">${inst.label}</span><span class="chip-id">${inst.id}</span></span><span class="dot" style="background:${inst.color}"></span>`;
       chip.onclick = () => {
         state.currentInstrument = inst.id;
         editor.setInstrument(inst.id);
+        AudioKit.init(state.volume);
+        AudioKit.play(60, 0.18, inst.id, 1);
         renderInstruments();
       };
       instList.appendChild(chip);
@@ -188,7 +185,7 @@
       { step: 13, pitch: 64 }, { step: 14, pitch: 62 }, { step: 15, pitch: 60 }
     ];
     melody.forEach((n, i) => {
-      pat.notes.push({ ...n, instrument: i % 3 === 0 ? 'bell' : 'blox', velocity: 1 });
+      pat.notes.push({ ...n, instrument: i % 3 === 0 ? 'sonarBeep' : 'harp_pling', velocity: 1 });
     });
     state.patterns = [pat];
     state.currentPattern = 'p1';
@@ -232,7 +229,7 @@
         events.push({
           time: offset + n.step * stepSec + sway,
           pitch: n.pitch,
-          instrument: n.instrument || 'blox',
+          instrument: n.instrument || 'harp_pling',
           velocity: n.velocity == null ? 1 : n.velocity,
           dur: stepSec * 0.82
         });
@@ -245,87 +242,83 @@
 
   const typeOf = (inst) => ({ blox: 'square', bell: 'sine', reed: 'sawtooth', hollow: 'triangle' })[inst] || 'square';
 
-  /* Bloxd World Code: no async, await, Promise, setTimeout, or window.
-     Timing is the tick callback (~20 Hz). Notes are api.playSound. */
-  const BLOXD_SOUNDS = ['harp_pling', 'sonarBeep', 'trumpetNote1', 'bass'];
-  const BLOXD_INST = { blox: 0, bell: 1, reed: 2, hollow: 3 };
-
-  const midiRate = (midi) => {
-    let r = Math.pow(2, (midi - 60) / 12);
-    if (r < 0.5) r = 0.5;
-    if (r > 4) r = 4;
-    return r;
-  };
-
   const generateBloxdCode = () => {
     const { events, total } = flattenEvents();
     const rows = events.map((ev) => {
       const t = Math.round(ev.time * 1000);
-      const s = BLOXD_INST[ev.instrument] != null ? BLOXD_INST[ev.instrument] : 0;
+      let sound = ev.instrument || 'harp_pling';
+      let known = false;
+      for (let i = 0; i < BLOXD_SOUNDS.length; i++) {
+        if (BLOXD_SOUNDS[i].id === sound) known = true;
+      }
+      if (!known) sound = 'harp_pling';
       const vol = Math.max(0.15, Math.min(1, ev.velocity == null ? 1 : ev.velocity));
-      const rate = midiRate(ev.pitch);
-      return '[' + t + ',' + s + ',' + vol.toFixed(2) + ',' + +rate.toFixed(4) + ']';
+      const rate = bloxdMidiRate(ev.pitch);
+      return '\t[' + t + ', "' + sound + '", ' + vol.toFixed(2) + ', ' + Number(rate.toFixed(4)) + ']';
     });
-    const dur = Math.max(0, Math.round(total * 1000));
-    const loop = state.loop ? 1 : 0;
+    const dur = Math.max(1, Math.round(total * 1000));
+    const loopLit = state.loop ? 'true' : 'false';
+    const notesBlock = rows.length ? '\n' + rows.join(',\n') + '\n' : '';
     return [
-      'bmS=["harp_pling","sonarBeep","trumpetNote1","bass"];',
-      'bmSong=[' + rows.join(',') + '];',
-      'bmDur=' + dur + ';',
-      'bmLoop=' + loop + ';',
-      'bmOn={};',
-      'bmT={};',
-      'bmN={};',
-      'function playerCommand(playerId,command){',
-      'if(command==="run"||command.indexOf("run ")===0){',
-      'bmOn[playerId]=1;',
-      'bmT[playerId]=0;',
-      'bmN[playerId]=0;',
-      'api.sendMessage(playerId,"Playing",{color:"orange"});',
-      'return true;',
+      'let notes = [' + notesBlock + ']',
+      'let songMs = ' + dur,
+      'let loopSong = ' + loopLit,
+      'let playing = {}',
+      'let tMs = {}',
+      'let idx = {}',
+      '',
+      'playTune = (id) => {',
+      '\tif (!id) return',
+      '\tplaying[id] = true',
+      '\ttMs[id] = 0',
+      '\tidx[id] = 0',
       '}',
-      'if(command==="stop"){',
-      'bmOn[playerId]=0;',
-      'api.sendMessage(playerId,"Stopped",{color:"orange"});',
-      'return true;',
+      '',
+      'onPlayerJoin = (playerId) => {',
+      '\tplayTune(playerId)',
       '}',
+      '',
+      'playerCommand = (playerId, command) => {',
+      '\tif (command === "run") {',
+      '\t\tplayTune(playerId)',
+      '\t\tapi.sendMessage(playerId, "Playing", { color: "orange" })',
+      '\t\treturn true',
+      '\t}',
+      '\tif (command === "stop") {',
+      '\t\tplaying[playerId] = false',
+      '\t\tapi.sendMessage(playerId, "Stopped", { color: "orange" })',
+      '\t\treturn true',
+      '\t}',
       '}',
-      'function tick(dt){',
-      'var ids=api.getPlayerIds();',
-      'var p,id,t,i,n,len;',
-      'len=bmSong.length;',
-      'if(!len)return;',
-      'for(p=0;p<ids.length;p++){',
-      'id=ids[p];',
-      'if(!bmOn[id])continue;',
-      't=bmT[id]+dt;',
-      'i=bmN[id];',
-      'while(i<len&&bmSong[i][0]<=t){',
-      'n=bmSong[i];',
-      'api.playSound(id,bmS[n[1]],n[2],n[3],{playerIdOrPos:id});',
-      'i++;',
-      '}',
-      'if(bmLoop&&bmDur){',
-      'while(t>=bmDur){',
-      't=t-bmDur;',
-      'i=0;',
-      'while(i<len&&bmSong[i][0]<=t){',
-      'n=bmSong[i];',
-      'api.playSound(id,bmS[n[1]],n[2],n[3],{playerIdOrPos:id});',
-      'i++;',
-      '}',
-      '}',
-      '}else if(t>=bmDur){',
-      'bmOn[id]=0;',
-      't=0;',
-      'i=0;',
-      '}',
-      'bmT[id]=t;',
-      'bmN[id]=i;',
-      '}',
+      '',
+      'tick = (ms) => {',
+      '\tfor (const id of api.getPlayerIds()) {',
+      '\t\tif (!playing[id]) continue',
+      '\t\ttMs[id] += ms',
+      '\t\twhile (idx[id] < notes.length && notes[idx[id]][0] <= tMs[id]) {',
+      '\t\t\tconst n = notes[idx[id]]',
+      '\t\t\tapi.playSound(id, n[1], n[2], n[3])',
+      '\t\t\tidx[id] += 1',
+      '\t\t}',
+      '\t\tif (tMs[id] >= songMs) {',
+      '\t\t\tif (loopSong) {',
+      '\t\t\t\ttMs[id] -= songMs',
+      '\t\t\t\tidx[id] = 0',
+      '\t\t\t\twhile (idx[id] < notes.length && notes[idx[id]][0] <= tMs[id]) {',
+      '\t\t\t\t\tconst n2 = notes[idx[id]]',
+      '\t\t\t\t\tapi.playSound(id, n2[1], n2[2], n2[3])',
+      '\t\t\t\t\tidx[id] += 1',
+      '\t\t\t\t}',
+      '\t\t\t} else {',
+      '\t\t\t\tplaying[id] = false',
+      '\t\t\t}',
+      '\t\t}',
+      '\t}',
       '}'
     ].join('\n');
   };
+
+  const generateCodeBlock = () => 'playTune(myId)';
 
   const generateBrowserCode = () => {
     const { events, total } = flattenEvents();
@@ -379,18 +372,18 @@
       .trim();
   };
 
-  const isBloxdWorldCode = (s) => /api\.playSound|playerCommand|bmSong/.test(s);
+  const isBloxdWorldCode = (s) => /api\.playSound|playerCommand|playTune|let notes/.test(s);
 
   const renderExport = () => {
     const code = generateBloxdCode();
     $('export-code').textContent = code;
     $('export-code').dataset.raw = code;
+    if ($('export-block')) $('export-block').textContent = generateCodeBlock();
     const note = $('export-note');
     if (note) {
       const n = code.length;
       const limit = 16000;
-      let msg = 'Sounds: Blox → harp_pling · Bell → sonarBeep · Reed → trumpetNote1 · Hollow → bass';
-      msg += ' · ' + n + ' / ' + limit + ' chars';
+      let msg = 'api.playSound · ' + n + ' / ' + limit + ' chars';
       if (n > limit) msg = 'Too long for World Code (' + n + ' chars, max ' + limit + '). Remove notes.';
       note.textContent = msg;
     }
@@ -511,13 +504,18 @@
   $('btn-export').onclick = openModal;
   $('btn-close-modal').onclick = () => $('export-modal').close();
 
+  const flashCopied = (btn) => {
+    const old = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = old; }, 1200);
+  };
   $('btn-copy').onclick = () => {
     const code = $('export-code').textContent;
-    navigator.clipboard.writeText(code).then(() => {
-      const old = $('btn-copy').textContent;
-      $('btn-copy').textContent = 'Copied!';
-      setTimeout(() => { $('btn-copy').textContent = old; }, 1200);
-    });
+    navigator.clipboard.writeText(code).then(() => flashCopied($('btn-copy')));
+  };
+  $('btn-copy-block').onclick = () => {
+    const code = ($('export-block') && $('export-block').textContent) || 'playTune(myId)';
+    navigator.clipboard.writeText(code).then(() => flashCopied($('btn-copy-block')));
   };
   $('btn-run-export').onclick = () => {
     $('export-modal').close();

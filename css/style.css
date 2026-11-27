@@ -173,6 +173,7 @@ pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
 .chip:hover { background: rgba(255,255,255,0.75); border-color: var(--accent); }
 .chip.active { background: var(--accent); color: #fff; border-color: var(--accent-deep); box-shadow: 0 0 16px var(--glow); }
 .chip .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; opacity: .9; box-shadow: 0 0 8px currentColor; }
+.chip-id { display: block; font-size: 10px; font-weight: 700; opacity: 0.7; letter-spacing: 0.2px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span:first-child { font-size: 12px; font-weight: 700; color: var(--ink-soft); }

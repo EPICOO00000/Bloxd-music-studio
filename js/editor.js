@@ -57,12 +57,7 @@ const Editor = (canvas, axisEl, opts = {}) => {
     const w = cellW - 4;
     const h = cellH - 4;
     const rad = 6;
-    const instColor = {
-      blox: '#f59e0b',
-      bell: '#c084fc',
-      reed: '#34d399',
-      hollow: '#60a5fa'
-    }[n.instrument] || '#f59e0b';
+    const instColor = bloxdColor(n.instrument);
     const alpha = 0.5 + 0.5 * (n.velocity || 1);
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -122,7 +117,7 @@ const Editor = (canvas, axisEl, opts = {}) => {
   const setNoteAt = (step, pitch, add) => {
     const idx = notes.findIndex(n => n.step === step && n.pitch === pitch);
     if (add) {
-      if (idx < 0) notes.push({ step, pitch, instrument: opts.currentInstrument || 'blox', velocity: 1 });
+      if (idx < 0) notes.push({ step, pitch, instrument: opts.currentInstrument || 'harp_pling', velocity: 1 });
     } else {
       if (idx >= 0) notes.splice(idx, 1);
     }
