@@ -245,7 +245,89 @@
 
   const typeOf = (inst) => ({ blox: 'square', bell: 'sine', reed: 'sawtooth', hollow: 'triangle' })[inst] || 'square';
 
-  const generateCode = () => {
+  /* Bloxd World Code: no async, await, Promise, setTimeout, or window.
+     Timing is the tick callback (~20 Hz). Notes are api.playSound. */
+  const BLOXD_SOUNDS = ['harp_pling', 'sonarBeep', 'trumpetNote1', 'bass'];
+  const BLOXD_INST = { blox: 0, bell: 1, reed: 2, hollow: 3 };
+
+  const midiRate = (midi) => {
+    let r = Math.pow(2, (midi - 60) / 12);
+    if (r < 0.5) r = 0.5;
+    if (r > 4) r = 4;
+    return r;
+  };
+
+  const generateBloxdCode = () => {
+    const { events, total } = flattenEvents();
+    const rows = events.map((ev) => {
+      const t = Math.round(ev.time * 1000);
+      const s = BLOXD_INST[ev.instrument] != null ? BLOXD_INST[ev.instrument] : 0;
+      const vol = Math.max(0.15, Math.min(1, ev.velocity == null ? 1 : ev.velocity));
+      const rate = midiRate(ev.pitch);
+      return '[' + t + ',' + s + ',' + vol.toFixed(2) + ',' + +rate.toFixed(4) + ']';
+    });
+    const dur = Math.max(0, Math.round(total * 1000));
+    const loop = state.loop ? 1 : 0;
+    return [
+      'bmS=["harp_pling","sonarBeep","trumpetNote1","bass"];',
+      'bmSong=[' + rows.join(',') + '];',
+      'bmDur=' + dur + ';',
+      'bmLoop=' + loop + ';',
+      'bmOn={};',
+      'bmT={};',
+      'bmN={};',
+      'function playerCommand(playerId,command){',
+      'if(command==="run"||command.indexOf("run ")===0){',
+      'bmOn[playerId]=1;',
+      'bmT[playerId]=0;',
+      'bmN[playerId]=0;',
+      'api.sendMessage(playerId,"Playing",{color:"orange"});',
+      'return true;',
+      '}',
+      'if(command==="stop"){',
+      'bmOn[playerId]=0;',
+      'api.sendMessage(playerId,"Stopped",{color:"orange"});',
+      'return true;',
+      '}',
+      '}',
+      'function tick(dt){',
+      'var ids=api.getPlayerIds();',
+      'var p,id,t,i,n,len;',
+      'len=bmSong.length;',
+      'if(!len)return;',
+      'for(p=0;p<ids.length;p++){',
+      'id=ids[p];',
+      'if(!bmOn[id])continue;',
+      't=bmT[id]+dt;',
+      'i=bmN[id];',
+      'while(i<len&&bmSong[i][0]<=t){',
+      'n=bmSong[i];',
+      'api.playSound(id,bmS[n[1]],n[2],n[3],{playerIdOrPos:id});',
+      'i++;',
+      '}',
+      'if(bmLoop&&bmDur){',
+      'while(t>=bmDur){',
+      't=t-bmDur;',
+      'i=0;',
+      'while(i<len&&bmSong[i][0]<=t){',
+      'n=bmSong[i];',
+      'api.playSound(id,bmS[n[1]],n[2],n[3],{playerIdOrPos:id});',
+      'i++;',
+      '}',
+      '}',
+      '}else if(t>=bmDur){',
+      'bmOn[id]=0;',
+      't=0;',
+      'i=0;',
+      '}',
+      'bmT[id]=t;',
+      'bmN[id]=i;',
+      '}',
+      '}'
+    ].join('\n');
+  };
+
+  const generateBrowserCode = () => {
     const { events, total } = flattenEvents();
     const lines = [];
     lines.push('(async function(){');
@@ -297,12 +379,21 @@
       .trim();
   };
 
-  const asRunCommand = (code) => '/run ' + minify(code);
+  const isBloxdWorldCode = (s) => /api\.playSound|playerCommand|bmSong/.test(s);
 
   const renderExport = () => {
-    const code = generateCode();
-    $('export-code').textContent = asRunCommand(code);
-    $('export-code').dataset.raw = minify(code);
+    const code = generateBloxdCode();
+    $('export-code').textContent = code;
+    $('export-code').dataset.raw = code;
+    const note = $('export-note');
+    if (note) {
+      const n = code.length;
+      const limit = 16000;
+      let msg = 'Sounds: Blox → harp_pling · Bell → sonarBeep · Reed → trumpetNote1 · Hollow → bass';
+      msg += ' · ' + n + ' / ' + limit + ' chars';
+      if (n > limit) msg = 'Too long for World Code (' + n + ' chars, max ' + limit + '). Remove notes.';
+      note.textContent = msg;
+    }
   };
 
   /* ---------- /run : execute exported song snippets ---------- */
@@ -361,13 +452,20 @@
   };
 
   const runExported = (raw) => {
-    const code = extractCode(raw) || minify(generateCode());
-    if (!code) throw new Error('nothing to run');
+    const code = extractCode(raw);
+    if (!code) {
+      if (!Player.isPlaying() && !exportPlaying) $('btn-play').click();
+      return;
+    }
+    if (isBloxdWorldCode(code)) {
+      meta.textContent = 'Paste into World Code (F8), then type /run in Bloxd chat';
+      return;
+    }
     stopEverything();
     execSong(code);
     exportPlaying = true;
     updatePlayBtn(true);
-    meta.textContent = 'Running /run';
+    meta.textContent = 'Running preview';
   };
 
   const handleCommand = (raw) => {
@@ -391,7 +489,7 @@
       return;
     }
     if (cmd === '/help') {
-      meta.textContent = '/run  /stop  — paste exported code after /run';
+      meta.textContent = 'Here: /run previews. In Bloxd: paste Export into F8, then /run';
       return;
     }
     meta.textContent = 'Unknown command — try /run or /stop';
@@ -422,20 +520,15 @@
     });
   };
   $('btn-run-export').onclick = () => {
-    try {
-      runExported($('export-code').dataset.raw || $('export-code').textContent);
-      $('export-modal').close();
-    } catch (err) {
-      console.error(err);
-      meta.textContent = 'Run failed';
-    }
+    $('export-modal').close();
+    if (!Player.isPlaying() && !exportPlaying) $('btn-play').click();
   };
   $('btn-download').onclick = () => {
-    const code = $('export-code').dataset.raw || extractCode($('export-code').textContent);
+    const code = $('export-code').dataset.raw || $('export-code').textContent;
     const blob = new Blob([code], { type: 'application/javascript' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'bloxd-music.js';
+    a.href = url; a.download = 'bloxd-world-code.js';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
@@ -450,7 +543,7 @@
   editor.setNotes(state.patterns[0].notes);
   window.addEventListener('resize', () => editor.resize());
   editor.resize();
-  meta.textContent = 'Ready — /run to play exported code';
+  meta.textContent = 'Ready — Export → F8 World Code → /run in chat';
 
   const typingInField = (el) => {
     if (!el) return false;
