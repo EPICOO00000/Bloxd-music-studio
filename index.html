@@ -63,21 +63,31 @@
             <div class="grid-overlay" id="grid-overlay"></div>
           </div>
         </div>
-        <div class="hint" id="hint">Click a cell to add a note &bull; drag to paint &bull; right-click to erase &bull; <kbd>Space</kbd> to play</div>
+        <div class="hint" id="hint">Click a cell to add a note &bull; drag to paint &bull; right-click to erase &bull; <kbd>Space</kbd> to play &bull; <kbd>/</kbd> then <kbd>/run</kbd> to play exported code</div>
       </main>
     </div>
 
     <footer class="bar bottom">
-      <div class="transport">
-        <button class="btn" id="btn-play" title="Play (Space)">&#9658;</button>
-        <button class="btn" id="btn-stop" title="Stop">&#9724;</button>
-        <button class="btn ghost small" id="btn-loop" title="Loop on/off">Loop</button>
-        <div class="divider"></div>
-        <span class="meta" id="meta">Ready</span>
-      </div>
-      <div class="export-wrap">
-        <button class="btn accent" id="btn-export" title="Export co-routine code">Export Code</button>
-        <span class="tag" id="export-tag">co-routines only</span>
+      <form class="cmd-form" id="cmd-form" autocomplete="off" spellcheck="false">
+        <span class="cmd-prefix" aria-hidden="true">/</span>
+        <input id="cmd" class="cmd-input" type="text" name="cmd"
+          placeholder="run (async function(){ ... })();"
+          title="Paste exported code after /run and press Enter"
+          aria-label="Command. Type /run then your exported music code.">
+        <button type="submit" class="btn accent small" id="btn-cmd">Run</button>
+      </form>
+      <div class="bottom-row">
+        <div class="transport">
+          <button class="btn" id="btn-play" title="Play (Space)">&#9658;</button>
+          <button class="btn" id="btn-stop" title="Stop">&#9724;</button>
+          <button class="btn ghost small" id="btn-loop" title="Loop on/off">Loop</button>
+          <div class="divider"></div>
+          <span class="meta" id="meta">Ready</span>
+        </div>
+        <div class="export-wrap">
+          <button class="btn accent" id="btn-export" title="Export co-routine code">Export Code</button>
+          <span class="tag" id="export-tag">/run ready</span>
+        </div>
       </div>
     </footer>
 
@@ -88,13 +98,14 @@
           <button class="btn ghost small" id="btn-close-modal" title="Close">Close</button>
         </header>
         <div class="modal-body">
-          <p class="small muted">Self-contained &bull; async/await co-routines only &bull; compressed</p>
+          <p class="small muted">Paste into the command bar and press Enter, or copy and type it yourself: <kbd>/run</kbd> + this snippet</p>
           <div class="code-wrap">
             <pre><code id="export-code">// generate a song first</code></pre>
           </div>
         </div>
         <footer class="modal-foot">
-          <button class="btn ghost small" id="btn-copy">Copy</button>
+          <button class="btn ghost small" id="btn-copy">Copy /run</button>
+          <button class="btn ghost small" id="btn-run-export">Run</button>
           <button class="btn accent small" id="btn-download">Download .js</button>
         </footer>
       </div>
