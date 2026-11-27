@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bloxd Music Studio</title>
+  <meta name="description" content="In-browser Bloxd.io music editor. Compose on a piano roll, play it back, and export async co-routine JavaScript.">
+  <meta name="theme-color" content="#f59e0b">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="bar top">
+      <div class="brand" aria-label="Bloxd Music Maker">
+        <span class="bloxd-icon" aria-hidden="true">B</span>
+        <span class="brand-text">Bloxd Music Maker</span>
+      </div>
+      <div class="top-right">
+        <button class="btn ghost" id="btn-new" title="New song">New</button>
+        <button class="btn ghost" id="btn-example" title="Load cozy example">Example</button>
+      </div>
+    </header>
+
+    <div class="workspace" id="workspace">
+      <aside class="sidebar">
+        <div class="panel">
+          <div class="panel-title">Instruments</div>
+          <div class="chip-group" id="instrument-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Tempo &amp; Feel</div>
+          <label class="field">
+            <span>BPM</span>
+            <input type="range" id="bpm" min="40" max="220" value="110">
+            <span class="val" id="bpm-val">110</span>
+          </label>
+          <label class="field">
+            <span>Swing</span>
+            <input type="range" id="swing" min="0" max="40" value="0" step="1">
+            <span class="val" id="swing-val">0%</span>
+          </label>
+          <label class="field">
+            <span>Master Volume</span>
+            <input type="range" id="volume" min="0" max="100" value="70">
+            <span class="val" id="volume-val">70%</span>
+          </label>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Pattern</div>
+          <div class="chip-group" id="pattern-list"></div>
+          <button class="btn small full" id="btn-add-pattern">+ Add pattern</button>
+        </div>
+      </aside>
+
+      <main class="editor" id="editor">
+        <div class="editor-header">
+          <div class="piano-axis" id="piano-axis"></div>
+          <div class="grid-wrap">
+            <canvas id="grid" class="grid-canvas"></canvas>
+            <div class="grid-overlay" id="grid-overlay"></div>
+          </div>
+        </div>
+        <div class="hint" id="hint">Click a cell to add a note &bull; drag to paint &bull; right-click to erase &bull; <kbd>Space</kbd> to play</div>
+      </main>
+    </div>
+
+    <footer class="bar bottom">
+      <div class="transport">
+        <button class="btn" id="btn-play" title="Play (Space)">&#9658;</button>
+        <button class="btn" id="btn-stop" title="Stop">&#9724;</button>
+        <button class="btn ghost small" id="btn-loop" title="Loop on/off">Loop</button>
+        <div class="divider"></div>
+        <span class="meta" id="meta">Ready</span>
+      </div>
+      <div class="export-wrap">
+        <button class="btn accent" id="btn-export" title="Export co-routine code">Export Code</button>
+        <span class="tag" id="export-tag">co-routines only</span>
+      </div>
+    </footer>
+
+    <dialog class="modal" id="export-modal">
+      <div class="modal-card">
+        <header class="modal-head">
+          <h3>Exported Music Code</h3>
+          <button class="btn ghost small" id="btn-close-modal" title="Close">Close</button>
+        </header>
+        <div class="modal-body">
+          <p class="small muted">Self-contained &bull; async/await co-routines only &bull; compressed</p>
+          <div class="code-wrap">
+            <pre><code id="export-code">// generate a song first</code></pre>
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn ghost small" id="btn-copy">Copy</button>
+          <button class="btn accent small" id="btn-download">Download .js</button>
+        </footer>
+      </div>
+    </dialog>
+  </div>
+
+  <script src="js/audio.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
