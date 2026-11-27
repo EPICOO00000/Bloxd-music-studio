@@ -12,6 +12,7 @@ const AudioKit = (() => {
       const Ctor = window.AudioContext || window.webkitAudioContext;
       ctx = new Ctor();
     }
+    if (ctx.state === 'suspended') ctx.resume();
     if (!master) {
       master = ctx.createGain();
       master.connect(ctx.destination);
@@ -35,18 +36,26 @@ const AudioKit = (() => {
     if (i >= 0) voices.splice(i, 1);
   };
 
-  const envGain = (gain, t, peak, dur, a, d, s, r) => {
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(peak, t + a);
-    gain.gain.linearRampToValueAtTime(peak * s, t + a + d);
-    gain.gain.linearRampToValueAtTime(0, t + dur + r);
+  const envGain = (gain, t, peak, dur, a, d, s, rel) => {
+    const attack = Math.max(0.001, a);
+    const decay = Math.max(0.001, d);
+    const release = Math.max(0.001, rel);
+    const hold = Math.max(attack + decay + 0.01, dur);
+    gain.gain.cancelScheduledValues(t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(peak, t + attack);
+    gain.gain.linearRampToValueAtTime(Math.max(0.0001, peak * s), t + attack + decay);
+    gain.gain.linearRampToValueAtTime(0.0001, t + hold + release);
   };
 
   const specOf = (id) => {
-    for (let i = 0; i < BLOXD_SOUNDS.length; i++) {
-      if (BLOXD_SOUNDS[i].id === id) return BLOXD_SOUNDS[i];
+    if (typeof BLOXD_SOUNDS !== 'undefined') {
+      for (let i = 0; i < BLOXD_SOUNDS.length; i++) {
+        if (BLOXD_SOUNDS[i].id === id) return BLOXD_SOUNDS[i];
+      }
+      return BLOXD_SOUNDS[0];
     }
-    return BLOXD_SOUNDS[0];
+    return { id: 'harp_pling', osc: 'sine', noise: false };
   };
 
   const synth = {
@@ -57,9 +66,10 @@ const AudioKit = (() => {
     play(midi, durationSec, instrument, velocity, when) {
       const c = ensure();
       const spec = specOf(instrument || 'harp_pling');
-      const t = when == null ? c.currentTime : when;
+      const t = Math.max(c.currentTime, when == null ? c.currentTime : when);
       const v = Math.max(0, Math.min(1, velocity == null ? 1 : velocity));
       const peak = 0.2 * v;
+      const dur = Math.max(0.05, durationSec || 0.12);
       const gain = c.createGain();
       gain.connect(master);
       const voice = { gain };
@@ -68,12 +78,13 @@ const AudioKit = (() => {
       if (spec.noise) {
         const src = c.createBufferSource();
         src.buffer = noiseBuf;
-        src.playbackRate.setValueAtTime(bloxdMidiRate(midi), t);
-        const dur = spec.id === 'hat' ? 0.06 : 0.12;
-        envGain(gain, t, peak * 0.9, dur, 0.002, 0.04, 0.05, 0.05);
+        const rate = typeof bloxdMidiRate === 'function' ? bloxdMidiRate(midi) : 1;
+        src.playbackRate.setValueAtTime(rate, t);
+        const ndur = spec.id === 'hat' ? 0.06 : 0.12;
+        envGain(gain, t, peak * 0.9, ndur, 0.002, 0.04, 0.05, 0.05);
         src.connect(gain);
         src.start(t);
-        src.stop(t + dur + 0.08);
+        src.stop(t + ndur + 0.08);
         voice.src = src;
         src.onended = () => releaseVoice(voice);
         return voice;
@@ -81,18 +92,20 @@ const AudioKit = (() => {
 
       const osc = c.createOscillator();
       osc.type = spec.osc || 'sine';
+      osc.connect(gain);
       if (spec.kick) {
-        osc.frequency.setValueAtTime(midiToFreq(Math.min(midi, 48)), t);
+        const f0 = Math.max(40, midiToFreq(Math.min(midi, 48)));
+        osc.frequency.setValueAtTime(f0, t);
         osc.frequency.exponentialRampToValueAtTime(40, t + 0.12);
         envGain(gain, t, peak, 0.18, 0.004, 0.1, 0.15, 0.08);
+        osc.start(t);
         osc.stop(t + 0.28);
       } else {
         osc.frequency.setValueAtTime(midiToFreq(midi), t);
-        envGain(gain, t, peak, durationSec, 0.008, 0.07, 0.22, 0.14);
-        osc.stop(t + durationSec + 0.18);
+        envGain(gain, t, peak, dur, 0.008, 0.07, 0.22, 0.14);
+        osc.start(t);
+        osc.stop(t + dur + 0.18);
       }
-      osc.connect(gain);
-      osc.start(t);
       voice.osc = osc;
       osc.onended = () => releaseVoice(voice);
       return voice;
@@ -108,7 +121,6 @@ const AudioKit = (() => {
 
   const boot = () => {
     ensure();
-    if (ctx.state === 'suspended') ctx.resume();
   };
   ['pointerdown', 'keydown', 'mousedown', 'touchstart'].forEach((ev) => {
     document.addEventListener(ev, boot, { once: true, passive: true });
