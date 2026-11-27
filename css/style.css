@@ -55,7 +55,7 @@ pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
 .shell {
   width: 100vw; height: 100vh;
   display: grid;
-  grid-template-rows: 70px 1fr 86px;
+  grid-template-rows: 70px 1fr 128px;
   grid-template-columns: 1fr;
   gap: 0;
 }
@@ -71,7 +71,40 @@ pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
   z-index: 40;
 }
 .bar.top { border-bottom-color: var(--panel-border); }
-.bar.bottom { grid-row: 3; border-bottom: none; border-top: 1px solid var(--panel-border); justify-content: space-between; }
+.bar.bottom {
+  grid-row: 3; border-bottom: none; border-top: 1px solid var(--panel-border);
+  flex-direction: column; align-items: stretch; justify-content: center;
+  gap: 10px; padding: 12px 22px;
+}
+.bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+.cmd-form {
+  display: flex; align-items: center; gap: 0;
+  width: 100%; height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255,255,255,0.55);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+  overflow: hidden;
+}
+.cmd-form:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--glow);
+}
+.cmd-prefix {
+  flex-shrink: 0;
+  padding: 0 2px 0 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 800; font-size: 14px; color: var(--accent-deep);
+}
+.cmd-input {
+  flex: 1; min-width: 0; height: 100%;
+  border: none; background: transparent; outline: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px; color: var(--ink); padding: 0 10px 0 0;
+}
+.cmd-input::placeholder { color: var(--muted); opacity: 0.85; }
+.cmd-form .btn { margin: 4px; border-radius: 9px; }
 .top-right { margin-left: auto; display: flex; gap: 10px; }
 
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -0.4px; }
@@ -238,5 +271,7 @@ dialog.modal[open] {
   .piano-key { flex: none; width: 40px; border-bottom: none; border-right: 1px solid rgba(255,255,255,0.35); }
   .piano-key.sharp { position: static; width: 30px; height: 100%; margin: 0 -8px; z-index: 3; }
   .bar { padding: 0 14px; }
+  .bar.bottom { padding: 10px 14px; }
+  .cmd-input { font-size: 12px; }
   .modal { padding: 14px; }
 }

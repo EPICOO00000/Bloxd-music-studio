@@ -107,6 +107,7 @@
 
   let animId = null;
   let songStart = 0;
+  let exportPlaying = false;
 
   const startPlayhead = () => {
     songStart = performance.now();
@@ -129,12 +130,12 @@
   };
 
   $('btn-play').onclick = async () => {
-    if (Player.isPlaying()) {
-      Player.stop();
-      updatePlayBtn(false);
+    if (Player.isPlaying() || exportPlaying) {
+      stopEverything();
       meta.textContent = 'Stopped';
       return;
     }
+    stopRun();
     // resume audio context on gesture
     AudioKit.init(state.volume);
     const song = {
@@ -149,11 +150,8 @@
     startPlayhead();
   };
   $('btn-stop').onclick = () => {
-    Player.stop();
-    updatePlayBtn(false);
-    editor.setActiveStep(-1);
+    stopEverything();
     meta.textContent = 'Stopped';
-    cancelAnimationFrame(animId);
   };
   $('btn-loop').onclick = () => {
     state.loop = !state.loop;
@@ -170,7 +168,7 @@
   /* ---------- actions ---------- */
   $('btn-new').onclick = () => {
     if (!confirm('Start a new empty song?')) return;
-    Player.stop();
+    stopEverything();
     state.patterns = [{ id: 'p1', name: 'Pattern 1', steps: 16, notes: [] }];
     state.currentPattern = 'p1';
     editor.setSteps(16);
@@ -251,8 +249,11 @@
     const { events, total } = flattenEvents();
     const lines = [];
     lines.push('(async function(){');
+    lines.push('  if(window.__bloxdMusicStop)window.__bloxdMusicStop();');
     lines.push('  const C=window.AudioContext||window.webkitAudioContext;');
     lines.push('  const ctx=new C();');
+    lines.push('  let loop=true;');
+    lines.push('  window.__bloxdMusicStop=function(){loop=false;try{ctx.close()}catch(e){}};');
     lines.push('  const m=ctx.createGain();m.connect(ctx.destination);m.gain.value=0.7;');
     lines.push('  const sleep=ms=>new Promise(r=>setTimeout(r,ms));');
     lines.push('  const play=(midi,dur,inst,vel)=>{');
@@ -261,7 +262,7 @@
     lines.push('    const osc=ctx.createOscillator();const g=ctx.createGain();');
     lines.push('    const T={blox:"square",bell:"sine",reed:"sawtooth",hollow:"triangle"}[inst]||"square";');
     lines.push('    osc.type=T;osc.frequency.setValueAtTime(f,t);osc.detune.setValueAtTime(2,t);');
-    lines.push('    const E={blox:{a:0.008,d:0.06,s:0.35,r:0.12},bell:{a:0.01,d:0.14,s:0.05,r:0.3},reed:{a:0.02,d:0.10,s:0.25,r:0.18},hollow:{a:0.04,d:0.16,s:0.2,r:0.22}}[inst];');
+    lines.push('    const E={blox:{a:0.008,d:0.06,s:0.35,r:0.12},bell:{a:0.01,d:0.14,s:0.05,r:0.3},reed:{a:0.02,d:0.10,s:0.25,r:0.18},hollow:{a:0.04,d:0.16,s:0.2,r:0.22}}[inst]||{a:0.008,d:0.06,s:0.35,r:0.12};');
     lines.push('    const p=0.18*vel;');
     lines.push('    g.gain.setValueAtTime(0,t);');
     lines.push('    g.gain.linearRampToValueAtTime(p,t+E.a);');
@@ -279,9 +280,8 @@
     });
     const tail = Math.round((total - prev) * 1000);
     if (tail > 0) lines.push(`    await sleep(${tail});`);
-    lines.push('    if(loop){song();}');
+    lines.push('    if(loop)song();');
     lines.push('  };');
-    lines.push('  let loop=true;');
     lines.push('  song();');
     lines.push('})();');
     return lines.join('\n');
@@ -289,18 +289,124 @@
 
   const minify = (code) => {
     return code
-      .replace(/\/\/[^\n]*/g, '')        // line comments
-      .replace(/\/\*[\s\S]*?\*\//g, '')  // block comments
-      .replace(/\s+/g, ' ')              // collapse whitespace
-      .replace(/\s*([{}(),;:<>+\-*/=%&|!])\s*/g, '$1') // trim around symbols
-      .replace(/;\s*/g, ';')             // semicolons
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\s+/g, ' ')
+      .replace(/\s*([{}(),;:<>+\-*/=%&|!])\s*/g, '$1')
+      .replace(/;\s*/g, ';')
       .trim();
   };
 
+  const asRunCommand = (code) => '/run ' + minify(code);
+
   const renderExport = () => {
     const code = generateCode();
-    $('export-code').textContent = minify(code);
-    $('export-code').dataset.raw = code;
+    $('export-code').textContent = asRunCommand(code);
+    $('export-code').dataset.raw = minify(code);
+  };
+
+  /* ---------- /run : execute exported song snippets ---------- */
+  const runCtxs = [];
+  const decodeEntities = (s) => String(s)
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+
+  const stopRun = () => {
+    if (typeof window.__bloxdMusicStop === 'function') {
+      try { window.__bloxdMusicStop(); } catch (e) {}
+      window.__bloxdMusicStop = null;
+    }
+    while (runCtxs.length) {
+      const ctx = runCtxs.pop();
+      try { ctx.close(); } catch (e) {}
+    }
+  };
+
+  const stopEverything = () => {
+    stopRun();
+    exportPlaying = false;
+    Player.stop();
+    updatePlayBtn(false);
+    editor.setActiveStep(-1);
+    cancelAnimationFrame(animId);
+  };
+
+  const execSong = (src) => {
+    const OrigAC = window.AudioContext;
+    const OrigWAC = window.webkitAudioContext;
+    const wrap = function () {
+      const Base = OrigAC || OrigWAC;
+      const ctx = new Base();
+      runCtxs.push(ctx);
+      return ctx;
+    };
+    window.AudioContext = wrap;
+    window.webkitAudioContext = wrap;
+    try {
+      (0, eval)(src);
+    } finally {
+      window.AudioContext = OrigAC;
+      window.webkitAudioContext = OrigWAC;
+    }
+  };
+
+  const extractCode = (raw) => {
+    let s = decodeEntities(raw).trim();
+    s = s.replace(/^\/+run\s+/i, '').replace(/^run\s+/i, '');
+    return s.trim();
+  };
+
+  const runExported = (raw) => {
+    const code = extractCode(raw) || minify(generateCode());
+    if (!code) throw new Error('nothing to run');
+    stopEverything();
+    execSong(code);
+    exportPlaying = true;
+    updatePlayBtn(true);
+    meta.textContent = 'Running /run';
+  };
+
+  const handleCommand = (raw) => {
+    let line = decodeEntities(raw).trim();
+    if (!line) return;
+    if (line.startsWith('(async') || line.startsWith('(function')) {
+      runExported(line);
+      return;
+    }
+    if (!line.startsWith('/')) line = '/' + line;
+    const space = line.search(/\s/);
+    const cmd = (space === -1 ? line : line.slice(0, space)).toLowerCase();
+    const arg = space === -1 ? '' : line.slice(space + 1).trim();
+    if (cmd === '/run') {
+      runExported(arg);
+      return;
+    }
+    if (cmd === '/stop') {
+      stopEverything();
+      meta.textContent = 'Stopped';
+      return;
+    }
+    if (cmd === '/help') {
+      meta.textContent = '/run  /stop  — paste exported code after /run';
+      return;
+    }
+    meta.textContent = 'Unknown command — try /run or /stop';
+  };
+
+  $('cmd-form').onsubmit = (e) => {
+    e.preventDefault();
+    const input = $('cmd');
+    try {
+      handleCommand(input.value);
+    } catch (err) {
+      console.error(err);
+      meta.textContent = 'Run failed — check the snippet';
+      updatePlayBtn(false);
+    }
   };
 
   const openModal = () => { renderExport(); $('export-modal').showModal(); };
@@ -315,8 +421,17 @@
       setTimeout(() => { $('btn-copy').textContent = old; }, 1200);
     });
   };
+  $('btn-run-export').onclick = () => {
+    try {
+      runExported($('export-code').dataset.raw || $('export-code').textContent);
+      $('export-modal').close();
+    } catch (err) {
+      console.error(err);
+      meta.textContent = 'Run failed';
+    }
+  };
   $('btn-download').onclick = () => {
-    const code = $('export-code').textContent;
+    const code = $('export-code').dataset.raw || extractCode($('export-code').textContent);
     const blob = new Blob([code], { type: 'application/javascript' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -335,13 +450,29 @@
   editor.setNotes(state.patterns[0].notes);
   window.addEventListener('resize', () => editor.resize());
   editor.resize();
-  meta.textContent = 'Ready';
+  meta.textContent = 'Ready — /run to play exported code';
 
-  // keyboard: space to play/stop
+  const typingInField = (el) => {
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+  };
+
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && e.target === document.body) {
+    if (e.code === 'Space' && !typingInField(e.target) && e.target === document.body) {
       e.preventDefault();
       $('btn-play').click();
+      return;
+    }
+    if (e.key === '/' && !typingInField(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      const input = $('cmd');
+      input.focus();
+      if (!input.value) input.value = '';
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (document.activeElement === $('cmd')) $('cmd').blur();
     }
   });
 })();

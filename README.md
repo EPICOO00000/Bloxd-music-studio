@@ -12,6 +12,7 @@ https://epicoo00000.github.io/Bloxd-music-studio/
 - Tempo (BPM), swing, master volume, loop
 - Multiple patterns
 - **Export Code** — compressed co-routine JS you can copy or download
+- **`/run`** — paste exported code in the command bar to play it
 - Space bar to play / pause
 
 ## Project structure
@@ -37,6 +38,21 @@ npx --yes serve .
 ```
 
 Then compose, hit **Play**, and **Export Code** for a `.js` snippet.
+
+### `/run` exported music
+
+Export copies a command like:
+
+```
+/run (async function(){ ... })();
+```
+
+Paste that into the command bar at the bottom (or press `/` then `run` and paste the snippet) and hit Enter. The studio evals the co-routine and plays it.
+
+- `/run` — play the current song as exported code
+- `/run (async function(){ ... })();` — play a pasted export
+- `/stop` — stop playback
+
 
 ## Deploy (GitHub Pages)
 
